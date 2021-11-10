@@ -1,0 +1,113 @@
+package repo
+
+import (
+	"git.garena.com/shopee/seller-server/cs/user/internal/constant"
+	"git.garena.com/shopee/seller-server/cs/user/internal/model/dbmodel"
+	"git.garena.com/shopee/seller-server/cs/user/internal/repo/db"
+	"github.com/jinzhu/gorm"
+)
+
+type XXXRepository interface {
+	NewTransaction(tx *gorm.DB, userId int64) XXXRepository
+	ChooseShardTab(userId int64, useSlave ...bool) XXXRepository
+	Add(*dbmodel.XXXTab) error
+	Update(t *dbmodel.XXXTab) error
+	UpdateByUid(uid int64, t *dbmodel.XXXTab) error
+	UpdateByUidWithMap(uid int64, data map[string]interface{}) error
+	Save(t *dbmodel.XXXTab) error
+	Delete(IDs []int64) error
+	GetByXXXId(ID int64) (*dbmodel.XXXTab, error)
+	GetBaseInfoByID(ID int64) (*dbmodel.BaseXXX, error)
+	ExistByID(ID int64) (bool, error)
+	GetAll(cursor int64, size int64) ([]*dbmodel.XXXTab, error)
+}
+
+type XXXRepo struct {
+	selectDB *gorm.DB
+	tabName  string
+}
+
+var XXXRepo = new(XXXRepo)
+
+func (r *XXXRepo) NewTransaction(tx *gorm.DB, userId int64) XXXRepository {
+	tab := &dbmodel.XXXTab{}
+	return &XXXRepo{selectDB: tx, tabName: db.GenShardTabName(tab.TableName(), userId)}
+}
+
+func (r *XXXRepo) ChooseShardTab(userId int64, useSlave ...bool) XXXRepository {
+	tab := &dbmodel.XXXTab{}
+	dbName := db.GenShardDBName(userId)
+	if len(useSlave) > 0 && useSlave[0] {
+		return &XXXRepo{selectDB: db.ShardSlaveDbs[dbName], tabName: db.GenShardTabName(tab.TableName(), userId)}
+	}
+	return &XXXRepo{selectDB: db.ShardDbs[dbName], tabName: db.GenShardTabName(tab.TableName(), userId)}
+}
+
+func (r *XXXRepo) Add(t *dbmodel.XXXTab) error {
+	return r.selectDB.Table(r.tabName).Create(t).Error
+}
+
+func (r *XXXRepo) Update(t *dbmodel.XXXTab) error {
+	return r.selectDB.Table(r.tabName).Model(t).Updates(t).Error
+}
+
+func (r *XXXRepo) UpdateByUid(uid int64, t *dbmodel.XXXTab) error {
+	return r.selectDB.Table(r.tabName).
+		Where("cs_user_id = ?", uid).
+		Updates(t).Error
+}
+func (r *XXXRepo) UpdateByUidWithMap(uid int64, data map[string]interface{}) error {
+	return r.selectDB.Table(r.tabName).
+		Where("cs_user_id = ?", uid).
+		Updates(data).Error
+}
+func (r *XXXRepo) Save(t *dbmodel.XXXTab) error {
+	return r.selectDB.Table(r.tabName).Model(t).Save(t).Error
+}
+
+func (r *XXXRepo) Delete(IDs []int64) error {
+	data := map[string]interface{}{
+		"status_flag": constant.StatusFlagDelete,
+	}
+	return r.selectDB.Table(r.tabName).Model(&dbmodel.XXXTab{}).Where("cs_user_id IN(?)", IDs).Scopes(ItemIsExist).Updates(data).Error
+}
+func (r *XXXRepo) GetByXXXId(ID int64) (*dbmodel.XXXTab, error) {
+	var res dbmodel.XXXTab
+	err := r.selectDB.Table(r.tabName).Where("cs_user_id = ?", ID).Scopes(ItemIsExist).Find(&res).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	return &res, nil
+}
+func (r *XXXRepo) GetBaseInfoByID(ID int64) (*dbmodel.BaseXXX, error) {
+	var res dbmodel.BaseXXX
+	err := r.selectDB.Table(r.tabName).Where("cs_user_id = ? ", ID).Find(&res).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (r *XXXRepo) ExistByID(ID int64) (bool, error) {
+	var res dbmodel.XXXTab
+	err := r.selectDB.Table(r.tabName).Select("cs_user_id").Where("cs_user_id = ?", ID).Scopes(ItemIsExist).First(&res).Error
+	if gorm.IsRecordNotFoundError(err) {
+		return false, nil
+	}
+	if res.XXXId > 0 {
+		return true, nil
+	}
+
+	return false, err
+}
+
+func (r *XXXRepo) GetAll(cursor int64, size int64) ([]*dbmodel.XXXTab, error) {
+	var res []*dbmodel.XXXTab
+	err := r.selectDB.Table(r.tabName).Where("id > ?", cursor).Order("id asc").Limit(size).Scopes(ItemIsExist).Find(&res).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	return res, nil
+}
